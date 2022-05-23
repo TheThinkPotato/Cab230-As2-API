@@ -32,13 +32,26 @@ router.get("/countries", function (req, res, next) {
     })
     .catch((err) => {
       console.log(err);
-      res.json({ Error: true, Message: "Invalid query parameters. Query parameters are not permitted." });
+      res.json({ error: true, message: "Invalid query parameters. Query parameters are not permitted." });
     });
 });
 
 // volcanoes?country=japan&populatedWithin=5km 
 router.get("/:volcanoes", function (req, res, next) {
   let setDistance;
+  const queryData = req.query;
+
+  if (Object.keys(queryData).length === 0 || Object.keys(queryData).length > 2) {
+    res.status(400).json({ error: true, message: "Bad Request" });
+    return;
+  }
+
+  if (Object.keys(queryData).length === 2) {
+    if ((!("country" in queryData)) || (!("populatedWithin" in queryData))) {
+      res.status(400).json({ error: true, message: "Bad Request" });
+      return;
+    }
+  }
 
   if (req.query.country) {
 
@@ -56,7 +69,7 @@ router.get("/:volcanoes", function (req, res, next) {
         setDistance = "population_100km";
       }
       else {
-        res.json({ Error: true, Message: "Invalid value for populatedWithin: 15km. Only: 5km,10km,30km,100km are permitted." });
+        res.json({ error: true, message: "Invalid value for populatedWithin: 15km. Only: 5km,10km,30km,100km are permitted." });
         return;
       }
       req.db
@@ -69,7 +82,7 @@ router.get("/:volcanoes", function (req, res, next) {
         })
         .catch((err) => {
           console.log(err);
-          res.json({ Error: true, Message: "Invalid query parameters. Query parameters are not permitted." });
+          res.json({ error: true, message: "Invalid query parameters. Query parameters are not permitted." });
         });
     } else {
       req.db
@@ -81,49 +94,52 @@ router.get("/:volcanoes", function (req, res, next) {
         })
         .catch((err) => {
           console.log(err);
-          res.json({ Error: true, Message: "Invalid query parameters. Query parameters are not permitted." });
+          res.json({ error: true, message: "Invalid query parameters. Query parameters are not permitted." });
         });
     }
   } else {
-    res.status(400).json({ Error: true, Message: "Country is a required query parameter." });
+    res.status(400).json({ error: true, message: "Country is a required query parameter." });
   }
 });
 
 // check is current token is valid
 // @param auth takes req.headers.authorization
 const authCheck = function (auth) {
-  let response = false;
+  let response = { error: false, message: "" };
   if (!auth || auth.split(" ").length !== 2) {
-    response = false;
+    response.error = true;
+    response.message = "Authorization header is malformed"
   } else {
     const token = auth.split(" ")[1];
-    try {      
+    try {
       const payload = jwt.verify(token, secretKey);
       if (Date.now() > payload.exp) {
-        response = false;
-        return;
-      }      
-      response = true;
-    } catch (e) {      
-      response = false;
-      return;
+        response.error = true;
+        response.message = "Expired Token"
+        return response;
+      }
+      response.error = false;
+      response.message = "Good"
+    } catch (e) {
+      response.error = true;
+      response.message = "Invalid JWT token"
+      return response;
     }
   }
-  return response
+  return response;
 }
 
 
 router.get("/volcano/:id", function (req, res, next) {
   let selectSQL = ["id", "name", "country", "region", "subregion", "last_eruption", "summit", "elevation", "latitude", "longitude"];
+  let auth = { error: true }
   if (req.headers.authorization) {
-    let auth = authCheck(req.headers.authorization);
-    if (auth) {
+    auth = authCheck(req.headers.authorization);
+    if (!auth.error) {
       selectSQL = "*"
     } else {
-      res.status(401).json({
-        Error: true,
-        Message: "Invalid JWT token"
-      });
+      res.status(401).json(auth
+      );
       return;
     }
 
@@ -134,31 +150,36 @@ router.get("/volcano/:id", function (req, res, next) {
     .where("id", "=", req.params.id)
     .then((rows) => {
       if (rows.length === 0) {
-        res.json({ Error: true, Message: "Volcano with ID: " + req.params.id + " not found." });
-        return;
+        if (auth.error === true) {
+          res.status(404).json("Not Found", { error: true, message: "Not Found" });
+          return;
+        } else {
+          res.status(404).json("Not Found", { error: true, message: "Volcano with ID: " + req.params.id + " not found." });
+          return;
+        }
       }
-      res.json(rows);
+      res.json(rows[0]);
     })
     .catch((err) => {
       console.log(err);
-      res.json({ Error: true, Message: "Invalid query parameters. Query parameters are not permitted." });
+      res.status(404).json({ error: true, message: "Not Found" });
     });
 
 });
 
-router.post('/register', function (req, res, next) {
+router.post('/user/register', function (req, res, next) {
   const { email, password } = req.body;
   if (!email || !password) {
     res.status(400).json({
-      Error: true,
-      Message: "Request body incomplete, both email and password are required"
+      error: true,
+      message: "Bad Request"
     });
     return;
   }
   if (!/^[^@]+@[^@]+\.[^@]+$/.test(email)) {
     res.status(400).json({
-      Error: true,
-      Message: "Invalid format email address"
+      error: true,
+      message: "Invalid format email address"
     });
     return;
   }
@@ -167,8 +188,8 @@ router.post('/register', function (req, res, next) {
     .then(users => {
       if (users.length > 0) {
         res.status(409).json({
-          Error: true,
-          Message: "User already exists"
+          error: true,
+          message: "User already exists"
         });
         return;
       }
@@ -176,43 +197,167 @@ router.post('/register', function (req, res, next) {
       const hash = bcrypt.hashSync(password, 10);
       req.db.from("users").insert({ email, hash })
         .then(() => {
-          res.status(200).json({
-            Error: false,
-            Message: "User created"
+          res.status(201).json({
+            error: false,
+            message: "Created"
           });
         })
         .catch(err => {
           console.log(err);
           res.status(500).json({
-            Error: true,
-            Message: "Error in MySQL query"
+            error: true,
+            message: "Error in MySQL query"
           })
         });
     })
     .catch(err => {
       console.log(err);
       res.status(500).json({
-        Error: true,
-        Message: "Error in MySQL query"
+        error: true,
+        message: "Error in MySQL query"
       })
     });
 });
 
-router.post('/login', function (req, res, next) {
+
+//===================================================================================
+router.get('/user/:email/profile', function (req, res, next) {
+  let selectSQL = ["email", "firstName", "lastName"]
+  let userEmail;
+  if (req.headers.authorization) {
+    let auth = authCheck(req.headers.authorization);
+
+    const token = req.headers.authorization.split(" ")[1];
+
+    // Get email from bearer
+    try {
+      const payload = jwt.verify(token, secretKey);
+      userEmail = payload['email'];
+
+    } catch (e) {
+      res.status(401).json({
+        error: true,
+        message: "Invalid JWT token"
+      })
+    }
+
+    if (!auth.error) {
+      selectSQL = ["email", "firstName", "lastName", "dob", "address"];
+    }
+  }
+
+  req.db
+    .from("users")
+    .select(selectSQL)
+    .where("email", "=", req.params.email)
+    .then((rows) => {
+      if (rows.length === 0) {
+        res.status(404).json({ error: true, message: "Not Found" })
+        return;
+      }
+      // return less information if bearer email does not match
+      console.log(rows[0].email, userEmail)
+      if (rows[0].email !== userEmail) {
+        res.json({ email: rows[0].email, firstName: rows[0].firstName, lastName: rows[0].lastName })
+        return;
+      }
+      res.json(rows[0]);
+    })
+    .catch((err) => {
+      console.log(err);
+      res.json({ error: true, message: "Invalid query parameters. Query parameters are not permitted." });
+    });
+});
+
+
+router.put('/user/:email/profile', function (req, res, next) {
+  let userEmail;
+  let dbEmail;
+  if (Object.keys(req.body).length !== 4) {
+    res.status(400).json({
+      error: true,
+      message: "Request body incomplete: firstName, lastName, dob and address are required.",
+      email: req.params.email,
+      firstName: null,
+      lastName: null
+    })
+    return;
+  }
+
+  if (req.headers.authorization) {
+    let auth = authCheck(req.headers.authorization);
+    if (auth.error) {
+      res.status(401).json({ error: true, message: "Authorization header ('Bearer token') not found" });
+      return;
+    }
+  } else {
+    res.status(401).json({ error: true, message: "Unauthorized" });
+    return;
+
+  }
+  const token = req.headers.authorization.split(" ")[1];
+  // let payload = await jwt.verify(token, secretKey);
+  try {
+    const payload = jwt.verify(token, secretKey);
+    userEmail = payload['email'];
+  }
+  catch (ex) { console.log(ex.message); }
+  // userEmail = payload['email'];
+  // // Get email from bearer
+  // try {
+  //   const payload = jwt.verify(token, secretKey);
+  //   userEmail = payload['email'];
+
+
+  req.db
+    .from("users")
+    .select("email")
+    .where("email", "=", req.params.email)
+    .then((rows) => {
+      dbEmail = rows[0].email;
+    })
+
+
+    //==============================================Sync PRoblems
+    console.log(dbEmail,userEmail);
+
+  if (dbEmail !== userEmail) {
+    res.status(403).json({ error: true, message: "Forbidden" })
+    return;
+  }
+
+  req.db
+    .from("users")
+    .update({ 'firstName': req.body.firstName, 'lastName': req.body.lastName, 'dob': req.body.DOB, 'address': req.body.address })
+    .where("email", "=", req.params.email)
+    .then(() => {
+      res.status(200).json({
+        "email": req.params.email, 'firstName': req.body.firstName, 'lastName': req.body.lastName, 'dob': req.body.DOB, 'address': req.body.address
+      })
+    })
+    .catch((err) => {
+      console.log(err);
+      res.json({ error: true, message: "Invalid query parameters. Query parameters are not permitted." });
+    });
+});
+
+
+router.post('/user/login', function (req, res, next) {
   const { email, password } = req.body;
   if (!email || !password) {
     res.status(400).json({
-      Error: true,
-      Message: "Request body incomplete, both email and password are required"
+      error: true,
+      message: "Request body incomplete, both email and password are required"
     });
     return;
   }
+
   req.db.from("users").select("*").where({ email })
     .then(users => {
       if (users.length === 0) {
         res.status(401).json({
-          Error: true,
-          Message: "Incorrect email or password"
+          error: true,
+          message: "Incorrect email or password"
         });
         return;
       }
@@ -221,8 +366,8 @@ router.post('/login', function (req, res, next) {
 
       if (!bcrypt.compareSync(password, hash)) {
         res.status(401).json({
-          Error: true,
-          Message: "Incorrect email or password"
+          error: true,
+          message: "Incorrect email or password"
         });
         return;
       }
@@ -240,10 +385,13 @@ router.post('/login', function (req, res, next) {
     .catch(err => {
       console.log(err);
       res.status(500).json({
-        Error: true,
-        Message: "Error in MySQL query"
+        error: true,
+        message: "Error in MySQL query"
       })
     });
+
+
+
 });
 
 
