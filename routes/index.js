@@ -14,32 +14,11 @@ router.get("/me", function (req, res, next) {
 })
 
 
-router.get("/countries", function (req, res, next) {
-  req.db
-    .from("data")
-    .select("country")
-    .then((rows) => {
-
-      const countrySet = new Set();
-
-      rows.forEach(element => {
-        countrySet.add(element.country);
-      });
-
-      const countryList = [...countrySet].sort();
-      res.json(countryList
-      )
-    })
-    .catch((err) => {
-      console.log(err);
-      res.json({ error: true, message: "Invalid query parameters. Query parameters are not permitted." });
-    });
-});
-
 // volcanoes?country=japan&populatedWithin=5km 
-router.get("/:volcanoes", function (req, res, next) {
+router.get("/volcanoes", function (req, res, next) {
   let setDistance;
   const queryData = req.query;
+  console.log("im here");
 
   if (Object.keys(queryData).length === 0 || Object.keys(queryData).length > 2) {
     res.status(400).json({ error: true, message: "Bad Request" });
@@ -102,6 +81,28 @@ router.get("/:volcanoes", function (req, res, next) {
   }
 });
 
+router.get("/countries", function (req, res, next) {
+  req.db
+    .from("data")
+    .select("country")
+    .then((rows) => {
+
+      const countrySet = new Set();
+
+      rows.forEach(element => {
+        countrySet.add(element.country);
+      });
+
+      const countryList = [...countrySet].sort();
+      res.json(countryList
+      )
+    })
+    .catch((err) => {
+      console.log(err);
+      res.json({ error: true, message: "Invalid query parameters. Query parameters are not permitted." });
+    });
+});
+
 // check is current token is valid
 // @param auth takes req.headers.authorization
 const authCheck = function (auth) {
@@ -151,10 +152,10 @@ router.get("/volcano/:id", function (req, res, next) {
     .then((rows) => {
       if (rows.length === 0) {
         if (auth.error === true) {
-          res.status(404).json("Not Found", { error: true, message: "Not Found" });
+          res.status(404).json({ error: true, message: "Not Found" });
           return;
         } else {
-          res.status(404).json("Not Found", { error: true, message: "Volcano with ID: " + req.params.id + " not found." });
+          res.status(404).json({ error: true, message: "Volcano with ID: " + req.params.id + " not found." });
           return;
         }
       }
@@ -220,7 +221,7 @@ router.post('/user/register', function (req, res, next) {
 });
 
 
-//===================================================================================
+
 router.get('/user/:email/profile', function (req, res, next) {
   let selectSQL = ["email", "firstName", "lastName"]
   let userEmail;
@@ -255,8 +256,7 @@ router.get('/user/:email/profile', function (req, res, next) {
         res.status(404).json({ error: true, message: "Not Found" })
         return;
       }
-      // return less information if bearer email does not match
-      console.log(rows[0].email, userEmail)
+      // return less information if bearer email does not match      
       if (rows[0].email !== userEmail) {
         res.json({ email: rows[0].email, firstName: rows[0].firstName, lastName: rows[0].lastName })
         return;
@@ -269,10 +269,120 @@ router.get('/user/:email/profile', function (req, res, next) {
     });
 });
 
+//Leap year check
+function isLeapYear(year) {
+  let leapYearCheck = 0;
 
+  if (year % 4 === 0) {
+    leapYearCheck = 1;
+  }
+
+  if (year % 100 === 0 && year % 400 != 0) {
+    leapYearCheck = 0;
+  }
+
+  if (leapYearCheck === 1) {
+
+    return true;
+  } else {
+
+    return false;
+  }
+}
+
+
+function validDayCheck(d, m, y) {
+  
+
+  let dayFlag = 0;
+  let monthFlag = 0;
+  let yearFlag = 0;
+  const monthDays = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  let leapYear = isLeapYear(y);
+
+  if (leapYear) {
+    monthDays[1] += 1;
+  }
+
+  if (y > 0 && y <= 9999) yearFlag = true;
+  if (m > 0 && m <= 12) monthFlag = true;
+
+  if (d > 0 && d <= 31) {
+    if (d <= monthDays[m - 1]) {
+      dayFlag = true;
+    }
+  }
+
+
+  if (yearFlag && monthFlag && dayFlag) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+//=====================
+
+
+//Checks if first date is in the future
+function dobCheckFuture(myDOB, currentDateCheck) {
+  if (myDOB.year > currentDateCheck.year) {
+    return false;
+  }
+
+  else if (myDOB.year === currentDateCheck.year) {
+    if (myDOB.month > currentDateCheck.month) {
+      return false;
+    }
+    else if (myDOB.month === currentDateCheck.month) {
+      if (myDOB.day >= currentDateCheck.day) {
+        return false;
+      }
+
+    }
+  }
+  return true;
+}
+
+
+//===================================================================================
+//===================================================================================
+//===================================================================================
 router.put('/user/:email/profile', function (req, res, next) {
-  let userEmail;
-  let dbEmail;
+  let userEmail = null;
+  let dbEmail = null;
+  let authMode;
+  const regexName = /^[a-zA-Z ]+$/
+  const regexAddr = /^[a-zA-Z0-9\s\,\''\-]*$/
+  const regexEmail = /^[^@]+@[^@]+\.[^@]+$/
+  const regexDate = /^[0-9][0-9][0-9][0-9]-[0-9][0-9]+-[0-9][0-9]+$/
+
+
+  const dobWorking = String(req.body.dob).split('-');
+
+  currentDOB = { year: parseInt(dobWorking[0]), month: parseInt(dobWorking[1]), day: parseInt(dobWorking[2]) };
+  const today = new Date();
+  const currentDate = { year: today.getFullYear(), month: (today.getMonth() + 1), day: today.getDate() };
+
+
+  // Check if auth ok
+  if (req.headers.authorization) {
+    const token = req.headers.authorization.split(" ")[1];
+
+    try {
+      const payload = jwt.verify(token, secretKey);
+      userEmail = payload['email'];
+    }
+    catch (ex) { console.log(ex.message); }
+
+    let auth = authCheck(req.headers.authorization);
+    if (auth.error) {
+      res.status(401).json({ error: true, message: "Authorization header ('Bearer token') not found" });
+      return;
+    }
+  }
+
+  // Check number paramaters
   if (Object.keys(req.body).length !== 4) {
     res.status(400).json({
       error: true,
@@ -284,61 +394,102 @@ router.put('/user/:email/profile', function (req, res, next) {
     return;
   }
 
-  if (req.headers.authorization) {
-    let auth = authCheck(req.headers.authorization);
-    if (auth.error) {
-      res.status(401).json({ error: true, message: "Authorization header ('Bearer token') not found" });
-      return;
-    }
-  } else {
-    res.status(401).json({ error: true, message: "Unauthorized" });
-    return;
 
-  }
-  const token = req.headers.authorization.split(" ")[1];
-  // let payload = await jwt.verify(token, secretKey);
-  try {
-    const payload = jwt.verify(token, secretKey);
-    userEmail = payload['email'];
-  }
-  catch (ex) { console.log(ex.message); }
-  // userEmail = payload['email'];
-  // // Get email from bearer
-  // try {
-  //   const payload = jwt.verify(token, secretKey);
-  //   userEmail = payload['email'];
-
-
+  //Get User email from db
   req.db
     .from("users")
     .select("email")
     .where("email", "=", req.params.email)
     .then((rows) => {
+
       dbEmail = rows[0].email;
+
+      //Check if fully authorised or If Authorised with another token to acount or no auth.
+      if (userEmail === dbEmail) {        
+        authMode = "full"
+      } else if (userEmail !== null) {
+
+        authmode = "half"
+        res.status(403).json({ error: true, message: "Forbidden" })
+        return;
+      }
+      else {        
+        authmode = "none"
+        res.status(401).json({ error: true, message: "Unauthorized" })
+        return;
+      }
+
+      console.log("FISRT>>>>>", req.body.firstName, req.body.lastName, req.body.address, req.body.dob);
+
+      //Check if day sits on an invalid leap year
+      if( !isLeapYear(currentDOB.year) && currentDOB.month === 2 && currentDOB.day == 29 ){
+        res.status(400).json({
+          error: true,
+          message: "Bad Request",
+        })
+        return;
+      }
+      //Check invalid dates
+      if (!regexDate.test(req.body.dob)        
+        || currentDOB.month > 12 || currentDOB.day > 31  
+        || !validDayCheck(currentDOB.day, currentDOB.month, currentDOB.year)      
+      ) {
+        res.status(400).json({
+          error: true,
+          message: "Invalid input: dob must be a real date in format YYYY-MM-DD.",
+        })
+        return;
+      }
+
+      //Check in the future Dates
+      if (!dobCheckFuture(currentDOB, currentDate)) {
+        res.status(400).json({
+          error: true,
+          message: "Invalid input: dob must be a date in the past.",
+        })
+        return;
+      }
+
+      // Check input strings
+      if (!regexName.test(req.body.firstName) || !regexName.test(req.body.lastName)
+        || !regexEmail.test(req.params.email)
+        || !regexAddr.test(req.body.address) || typeof req.body.address !== "string"
+      ) {
+        res.status(400).json({
+          error: true,
+          message: "Request body invalid: firstName, lastName and address must be strings only.",
+
+        })
+        return;
+      }
+
+      //Update user
+      req.db.from("users").select("*").where("email", "=", req.params.email)
+        .then(users => {
+          if (users.length === 0) {
+            res.status(401).json({
+              error: true,
+              message: "Incorrect email or password"
+            });
+            return;
+          }
+
+          req.db
+            .from("users")
+            .update({ 'firstName': req.body.firstName, 'lastName': req.body.lastName, 'dob': req.body.dob, 'address': req.body.address })
+            .where("email", "=", req.params.email)
+            .then(() => {
+
+              res.status(200).json({
+                "email": req.params.email, 'firstName': req.body.firstName, 'lastName': req.body.lastName, 'dob': req.body.dob, 'address': req.body.address
+              })
+            })
+            .catch((err) => {
+              console.log(err);
+              res.json({ error: true, message: "Invalid query parameters. Query parameters are not permitted." });
+            });
+        })
     })
-
-
-    //==============================================Sync PRoblems
-    console.log(dbEmail,userEmail);
-
-  if (dbEmail !== userEmail) {
-    res.status(403).json({ error: true, message: "Forbidden" })
-    return;
-  }
-
-  req.db
-    .from("users")
-    .update({ 'firstName': req.body.firstName, 'lastName': req.body.lastName, 'dob': req.body.DOB, 'address': req.body.address })
-    .where("email", "=", req.params.email)
-    .then(() => {
-      res.status(200).json({
-        "email": req.params.email, 'firstName': req.body.firstName, 'lastName': req.body.lastName, 'dob': req.body.DOB, 'address': req.body.address
-      })
-    })
-    .catch((err) => {
-      console.log(err);
-      res.json({ error: true, message: "Invalid query parameters. Query parameters are not permitted." });
-    });
 });
 
 
