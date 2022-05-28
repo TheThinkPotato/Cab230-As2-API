@@ -1,24 +1,29 @@
-var createError = require("http-errors");
-var express = require("express");
-var path = require("path");
-var cookieParser = require("cookie-parser");
-var logger = require("morgan");
+const createError = require("http-errors");
+const express = require("express");
+const path = require("path");
+const cookieParser = require("cookie-parser");
+const logger = require("morgan");
 const cors = require('cors');
+
+const options = require("./knexfile.js");
+const res = require("express/lib/response");
+const knex = require("knex")(options);
 const helmet = require('helmet')
 const swaggerUi = require('swagger-ui-express');
 const swaggerDoc = require('./docs/swagger.json');
 
-var indexRouter = require("./routes/index");
-// var volcanoesRouter = require("./routes/volcanoes");
-// var usersRouter = require("./routes/users");
+const meRouter = require("./routes/me");
+const countriesRouter = require("./routes/countries");
+const volcanoRouter = require("./routes/volcano");
+const volcanoesRouter = require("./routes/volcanoes");
+const userRouter = require("./routes/user");
 
-var app = express();
+const app = express();
 // view engine setup
 app.options('*', cors()) // include before other routes
 
 app.set("views", path.join(__dirname, "views"));
 app.set("view engine", "jade");
-
 
 app.use(logger("dev"));
 app.use(cors());
@@ -28,18 +33,24 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, "public")));
 app.use(helmet());
 
+// logger.token('res', (req, res) => {
+//   const headers = {}
+//   res.getHeaderNames().map(h => headers[h] = res.getHeader(h))
+//   return JSON.stringify(headers)
+// });
 
-const options = require("./knexfile.js");
-const res = require("express/lib/response");
-const knex = require("knex")(options);
+app.use("/", swaggerUi.serve);
+app.get(
+  "/",
+  swaggerUi.setup(swaggerDoc, {
+    swaggerOptions: { defaultModelsExpandDepth: -1 }, // Hide schema section
+  })
+);
+
 app.use((req, res, next) => {
   req.db = knex;
   next();
 });
-
-          // app.use("/volcanoes", volcanoesRouter);
-app.use("/", indexRouter);
-        // app.use("/users", usersRouter);
 
 app.get("/knex", function (req, res, next) {
   req.db
@@ -52,22 +63,19 @@ app.get("/knex", function (req, res, next) {
   res.send("Version Logged successfully");
 });
 
-app.use("/", swaggerUi.serve);
-app.get(
-  "/",
-  swaggerUi.setup(swaggerDoc, {
-    swaggerOptions: { defaultModelsExpandDepth: -1 }, // Hide schema section
-  })
-);
 
+
+app.use("/countries", countriesRouter);
+app.use("/me", meRouter);
+app.use("/volcano", volcanoRouter);
+app.use("/volcanoes", volcanoesRouter);
+app.use("/user", userRouter);
 
 
 // app.use("/[.a-zA-Z0-9-]+",function ( req,res,next)
-app.use("/",function ( req,res,next)
-{
+app.use("/", function (req, res, next) {
   // res.status(404).json({error: true , message : "Not Found"});
   next(createError(404, "Not Found"));
-  
 })
 
 
