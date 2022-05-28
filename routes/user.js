@@ -2,7 +2,7 @@ const express = require("express");
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
-const secretKey = "SUPER SECRET KEY DO NOT STEAL";
+const secretKey = process.env.APIKEY;
 
 const authCheck = require("../functions/authCheck");
 const dateTools = require("../functions/dateTools");
@@ -24,6 +24,7 @@ router.post('/register', function (req, res, next) {
     return;
   }
 
+  //Check user already exists
   req.db.from("users").select("*").where({ email })
     .then(users => {
       if (users.length > 0) {
@@ -86,6 +87,7 @@ router.get('/:email/profile', function (req, res, next) {
     }
   }
 
+  //Check email
   req.db
     .from("users")
     .select(selectSQL)
@@ -252,7 +254,7 @@ router.put('/:email/profile', function (req, res, next) {
 });
 
 
-router.post('/login', function (req, res, next) {
+router.post('/login', function (req, res, next) {  
   const { email, password } = req.body;
   if (!email || !password) {
     res.status(400).json({
@@ -262,6 +264,7 @@ router.post('/login', function (req, res, next) {
     return;
   }
 
+  //Check email and password
   req.db.from("users").select("*").where({ email })
     .then(users => {
       if (users.length === 0) {
@@ -273,7 +276,7 @@ router.post('/login', function (req, res, next) {
       }
 
       const { hash } = users[0];
-
+      //Check passowrd equals db password
       if (!bcrypt.compareSync(password, hash)) {
         res.status(401).json({
           error: true,

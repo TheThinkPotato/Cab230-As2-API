@@ -4,6 +4,7 @@ const path = require("path");
 const cookieParser = require("cookie-parser");
 const logger = require("morgan");
 const cors = require('cors');
+require('dotenv').config();
 
 const options = require("./knexfile.js");
 const res = require("express/lib/response");
@@ -38,6 +39,13 @@ app.use(helmet());
 //   res.getHeaderNames().map(h => headers[h] = res.getHeader(h))
 //   return JSON.stringify(headers)
 // });
+
+logger.token('req', (req, res) => JSON.stringify(req.headers))
+logger.token('res', (req, res) => {
+const headers = {}
+res.getHeaderNames().map(h => headers[h] = res.getHeader(h))
+return JSON.stringify(headers)
+})
 
 app.use("/", swaggerUi.serve);
 app.get(
